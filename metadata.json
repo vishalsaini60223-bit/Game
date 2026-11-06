@@ -1,0 +1,6 @@
+{
+  "name": "Vivi Pay",
+  "description": "Luxury buy & sell investment and trading platform with 10% profit returns, instant UPI verification, and referral earnings.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
