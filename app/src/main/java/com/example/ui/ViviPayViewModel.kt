@@ -17,9 +17,15 @@ enum class MainTab {
     PROFILE
 }
 
+enum class AuthMode {
+    REGISTER_OTP,
+    LOGIN_PASSWORD
+}
+
 enum class AuthStep {
-    PHONE_INPUT,
-    OTP_INPUT
+    PHONE_INPUT,    // Step 1: "phle mobile number dalege"
+    OTP_INPUT,      // Step 2: "far otp ayg"
+    SET_PASSWORD    // Step 3: "password set krege" -> "fer hoga login"
 }
 
 data class UiMessage(
@@ -32,9 +38,12 @@ class ViviPayViewModel(application: Application) : AndroidViewModel(application)
 
     private val repository = ViviPayRepository.getInstance()
 
-    // Auth state
-    private val _isLoggedIn = MutableStateFlow(true) // Start with VIP 80k logged in for instant preview, can logout/switch
+    // Auth state - Enforce strict registration & login (cannot enter without auth)
+    private val _isLoggedIn = MutableStateFlow(false)
     val isLoggedIn: StateFlow<Boolean> = _isLoggedIn.asStateFlow()
+
+    private val _authMode = MutableStateFlow(AuthMode.REGISTER_OTP)
+    val authMode: StateFlow<AuthMode> = _authMode.asStateFlow()
 
     private val _authStep = MutableStateFlow(AuthStep.PHONE_INPUT)
     val authStep: StateFlow<AuthStep> = _authStep.asStateFlow()
@@ -47,6 +56,18 @@ class ViviPayViewModel(application: Application) : AndroidViewModel(application)
 
     private val _generatedOtp = MutableStateFlow("482910")
     val generatedOtp: StateFlow<String> = _generatedOtp.asStateFlow()
+
+    private val _userNameInput = MutableStateFlow("")
+    val userNameInput: StateFlow<String> = _userNameInput.asStateFlow()
+
+    private val _newPasswordInput = MutableStateFlow("")
+    val newPasswordInput: StateFlow<String> = _newPasswordInput.asStateFlow()
+
+    private val _confirmPasswordInput = MutableStateFlow("")
+    val confirmPasswordInput: StateFlow<String> = _confirmPasswordInput.asStateFlow()
+
+    private val _loginPasswordInput = MutableStateFlow("")
+    val loginPasswordInput: StateFlow<String> = _loginPasswordInput.asStateFlow()
 
     private val _otpTimer = MutableStateFlow(30)
     val otpTimer: StateFlow<Int> = _otpTimer.asStateFlow()
@@ -104,22 +125,44 @@ class ViviPayViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    fun setAuthMode(mode: AuthMode) {
+        _authMode.value = mode
+        _authStep.value = AuthStep.PHONE_INPUT
+    }
+
     fun onOtpChange(otp: String) {
         if (otp.length <= 6 && otp.all { it.isDigit() }) {
             _otpInput.value = otp
         }
     }
 
+    fun onUserNameChange(name: String) {
+        _userNameInput.value = name
+    }
+
+    fun onNewPasswordChange(pass: String) {
+        _newPasswordInput.value = pass
+    }
+
+    fun onConfirmPasswordChange(pass: String) {
+        _confirmPasswordInput.value = pass
+    }
+
+    fun onLoginPasswordChange(pass: String) {
+        _loginPasswordInput.value = pass
+    }
+
+    // Step 1: "phle mobile number dalege" -> Request OTP
     fun requestOtp() {
         if (_phoneInput.value.length < 10) {
-            _uiMessage.value = UiMessage("Please enter a valid 10-digit mobile number", isSuccess = false)
+            _uiMessage.value = UiMessage("Kripya valid 10-digit mobile number enter karein", isSuccess = false)
             return
         }
         val demoOtp = (100000..999999).random().toString()
         _generatedOtp.value = demoOtp
         _otpInput.value = ""
         _authStep.value = AuthStep.OTP_INPUT
-        _uiMessage.value = UiMessage("OTP sent successfully to +91 ${_phoneInput.value}! Code: $demoOtp")
+        _uiMessage.value = UiMessage("OTP successfully sent to +91 ${_phoneInput.value}! Code: $demoOtp")
         startOtpCountdown()
     }
 
@@ -138,22 +181,69 @@ class ViviPayViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun verifyOtp() {
-        if (_otpInput.value == _generatedOtp.value || _otpInput.value == "123456" || _otpInput.value.length == 6) {
-            repository.loginWithPhone("+91 ${_phoneInput.value}", "User ${_phoneInput.value.takeLast(4)}")
-            _isLoggedIn.value = true
-            _authStep.value = AuthStep.PHONE_INPUT
-            _uiMessage.value = UiMessage("Login successful! Welcome to Vivi Pay.")
+    // Step 2: "far otp ayg" -> Verify OTP and move to Password setup
+    fun verifyOtpAndProceedToPassword() {
+        if (_otpInput.value == _generatedOtp.value || _otpInput.value == "123456") {
+            _authStep.value = AuthStep.SET_PASSWORD
+            _uiMessage.value = UiMessage("OTP Verified! Ab apna password set karein.")
         } else {
-            _uiMessage.value = UiMessage("Invalid OTP code. Please enter the correct 6-digit OTP.", isSuccess = false)
+            _uiMessage.value = UiMessage("Galat OTP code! Kripya 6-digit OTP code sahi se daalein.", isSuccess = false)
         }
     }
 
-    fun loginVipAccount() {
-        repository.loginVipDemoAccount()
+    // Step 3: "password set krege" -> Step 4: "fer hoga login"
+    fun completeRegistrationAndLogin() {
+        if (_newPasswordInput.value.length < 4) {
+            _uiMessage.value = UiMessage("Password kam se kam 4 characters ka hona chahiye", isSuccess = false)
+            return
+        }
+        if (_newPasswordInput.value != _confirmPasswordInput.value) {
+            _uiMessage.value = UiMessage("Password aur Confirm Password match nahi kar rahe!", isSuccess = false)
+            return
+        }
+
+        val profile = repository.registerUserWithPassword(
+            phone = _phoneInput.value,
+            password = _newPasswordInput.value,
+            name = _userNameInput.value
+        )
         _isLoggedIn.value = true
         _authStep.value = AuthStep.PHONE_INPUT
-        _uiMessage.value = UiMessage("Logged in as VIP Account with ₹80,000 balance!")
+        _newPasswordInput.value = ""
+        _confirmPasswordInput.value = ""
+        _uiMessage.value = UiMessage("Account created successfully! Welcome to Vivi Pay. UID: ${profile.uid}")
+    }
+
+    // Login with existing mobile number + password
+    fun loginWithPassword() {
+        if (_phoneInput.value.length < 10) {
+            _uiMessage.value = UiMessage("10-digit mobile number enter karein", isSuccess = false)
+            return
+        }
+        if (_loginPasswordInput.value.isEmpty()) {
+            _uiMessage.value = UiMessage("Password enter karein", isSuccess = false)
+            return
+        }
+
+        val profile = repository.loginWithPhoneAndPassword(_phoneInput.value, _loginPasswordInput.value)
+        if (profile != null) {
+            _isLoggedIn.value = true
+            _authStep.value = AuthStep.PHONE_INPUT
+            _loginPasswordInput.value = ""
+            _uiMessage.value = UiMessage("Login successful! Welcome back, ${profile.name}.")
+        } else {
+            _uiMessage.value = UiMessage("Galat mobile number ya password. VIP: 9076984521 / ViviPay@80k", isSuccess = false)
+        }
+    }
+
+    fun fillVipMobile() {
+        _phoneInput.value = "9076984521"
+        _loginPasswordInput.value = "ViviPay@80k"
+    }
+
+    fun fillVipAndSendOtp() {
+        _phoneInput.value = "9076984521"
+        requestOtp()
     }
 
     fun logout() {

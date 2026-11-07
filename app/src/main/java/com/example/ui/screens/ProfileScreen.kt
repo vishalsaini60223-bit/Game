@@ -109,9 +109,16 @@ fun ProfileScreen(
                                         fontWeight = FontWeight.Bold
                                     )
                                     Text(
-                                        text = user.phone,
+                                        text = user.email,
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = TextSilver
+                                        color = GoldLight,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    Text(
+                                        text = "${user.phone} • Pass: ViviPay@80k",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = TextSilver,
+                                        fontSize = 11.sp
                                     )
                                 }
                             }

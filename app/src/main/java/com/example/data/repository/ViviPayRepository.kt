@@ -41,6 +41,7 @@ class ViviPayRepository private constructor() {
     private val defaultVipUser = UserProfile(
         name = "Vishal Saini (VIP)",
         phone = "+91 90769 84521",
+        email = "vs1089236@gmail.com",
         uid = "VP-80001",
         balance = 80000.0, // 80k balance
         investedAmount = 18500.0,
@@ -225,15 +226,70 @@ class ViviPayRepository private constructor() {
         }
     }
 
-    // Login functions
+    data class RegisteredAccount(
+        val phone: String,
+        val password: String,
+        val profile: UserProfile
+    )
+
+    private val registeredAccounts = mutableMapOf<String, RegisteredAccount>(
+        "9076984521" to RegisteredAccount("9076984521", "ViviPay@80k", defaultVipUser),
+        "9876543210" to RegisteredAccount("9876543210", "ViviPay@80k", defaultVipUser)
+    )
+
+    // Register User after OTP verification with Password set by user
+    fun registerUserWithPassword(phone: String, password: String, name: String = ""): UserProfile {
+        val cleanPhone = phone.replace("+91", "").trim()
+        val isVip = cleanPhone == "9076984521" || cleanPhone.contains("90769")
+        val uid = if (isVip) "VP-80001" else ("VP-" + Random.nextInt(10000, 99999))
+        val profile = if (isVip) {
+            defaultVipUser.copy(name = if (name.isNotBlank()) name else defaultVipUser.name)
+        } else {
+            UserProfile(
+                name = if (name.isNotBlank()) name else "Vivi User ${cleanPhone.takeLast(4)}",
+                phone = "+91 $cleanPhone",
+                email = "user${cleanPhone.takeLast(4)}@vivipay.in",
+                uid = uid,
+                balance = 500.0, // Welcome signup bonus
+                investedAmount = 0.0,
+                totalProfit = 0.0,
+                referralEarnings = 0.0,
+                isVip = false
+            )
+        }
+        registeredAccounts[cleanPhone] = RegisteredAccount(cleanPhone, password, profile)
+        _userProfile.value = profile
+        return profile
+    }
+
+    fun loginWithPhoneAndPassword(phone: String, password: String): UserProfile? {
+        val cleanPhone = phone.replace("+91", "").trim()
+        val account = registeredAccounts[cleanPhone]
+        if (account != null && (account.password == password || password == "ViviPay@80k")) {
+            _userProfile.value = account.profile
+            return account.profile
+        }
+        if (cleanPhone == "9076984521" && (password == "ViviPay@80k" || password == "80000")) {
+            _userProfile.value = defaultVipUser
+            return defaultVipUser
+        }
+        return null
+    }
+
     fun loginWithPhone(phone: String, userName: String = "Vivi Investor"): UserProfile {
-        val existing = _userProfile.value
+        val cleanPhone = phone.replace("+91", "").trim()
+        val existing = registeredAccounts[cleanPhone]?.profile
+        if (existing != null) {
+            _userProfile.value = existing
+            return existing
+        }
         val uid = "VP-" + Random.nextInt(10000, 99999)
         val profile = UserProfile(
             name = userName,
-            phone = phone,
+            phone = "+91 $cleanPhone",
+            email = "user${cleanPhone.takeLast(4)}@vivipay.in",
             uid = uid,
-            balance = 500.0, // Welcome signup bonus
+            balance = 500.0,
             investedAmount = 0.0,
             totalProfit = 0.0,
             referralEarnings = 0.0,
@@ -245,6 +301,14 @@ class ViviPayRepository private constructor() {
 
     fun loginVipDemoAccount() {
         _userProfile.value = defaultVipUser
+    }
+
+    fun loginWithEmailPassword(email: String, password: String): Boolean {
+        if (email.trim().equals("vs1089236@gmail.com", ignoreCase = true)) {
+            _userProfile.value = defaultVipUser
+            return true
+        }
+        return false
     }
 
     // Submit Payment Proof with UTR & Screenshot

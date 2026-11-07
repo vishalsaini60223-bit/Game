@@ -15,6 +15,7 @@ enum class OrderStatus {
 data class UserProfile(
     val name: String,
     val phone: String,
+    val email: String = "vs1089236@gmail.com",
     val uid: String,
     val balance: Double,
     val investedAmount: Double,
